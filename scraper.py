@@ -59,42 +59,39 @@ async def scrape_imdb():
         
         return movies_to_process
 
-import csv
-
-def save_to_csv(movies, filename="imdb_trending.csv"):
-    print(f"Saving {len(movies)} movies to {filename}...")
+def save_to_supabase(supabase: Client, movies):
+    print(f"Saving {len(movies)} movies to Supabase (single table)...")
     
-    # Check if file exists to write headers
-    file_exists = os.path.isfile(filename)
-    
-    with open(filename, mode='a', newline='', encoding='utf-8') as f:
-        fieldnames = ['scrape_date', 'rank', 'title', 'year', 'rating', 'imdb_id', 'imdb_url', 'genres']
-        writer = csv.DictWriter(f, fieldnames=fieldnames)
+    records = []
+    for m in movies:
+        record = {
+            "title": m['title'],
+            "release_year": m['year'],
+            "imdb_id": m['imdb_id'],
+            "imdb_url": m['imdb_url'],
+            "rank": m['rank'],
+            "rating": m['rating'],
+            "genres": ", ".join(m['genres']) if m['genres'] else None,
+            "scrape_date": datetime.now().isoformat()
+        }
+        records.append(record)
         
-        if not file_exists:
-            writer.writeheader()
-            
-        scrape_date = datetime.now().isoformat()
-        
-        for m in movies:
-            writer.writerow({
-                'scrape_date': scrape_date,
-                'rank': m['rank'],
-                'title': m['title'],
-                'year': m['year'],
-                'rating': m['rating'],
-                'imdb_id': m['imdb_id'],
-                'imdb_url': m['imdb_url'],
-                'genres': ", ".join(m['genres'])
-            })
+    # Insert all records at once (batch insert)
+    res = supabase.table("trending_movies").insert(records).execute()
+    print("Batch insert successful.")
 
 async def main():
     try:
         movies = await scrape_imdb()
         print(f"Successfully scraped {len(movies)} movies.")
         
-        save_to_csv(movies)
-        print("Data saved to CSV successfully.")
+        if os.environ.get("SUPABASE_URL"):
+            supabase = get_supabase()
+            save_to_supabase(supabase, movies)
+            print("Data sync complete.")
+        else:
+            print("SUPABASE_URL not set, skipping database sync. Scraped data sample:")
+            print(json.dumps(movies[:3], indent=2))
             
     except Exception as e:
         print(f"Error: {e}")
