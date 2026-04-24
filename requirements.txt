@@ -1,4 +1,2 @@
 playwright
 beautifulsoup4
-supabase
-python-dotenv
